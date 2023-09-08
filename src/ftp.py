@@ -2,9 +2,9 @@ from os import listdir, remove, getcwd, chdir, stat, mkdir, rmdir, rename
 from time import monotonic, localtime, sleep
 from storage import remount
 
-_enc = "UTF-8"
+_enc = "UTF-8" # We currently only support UTF-8
 
-_msgs = [
+_msgs = [ # The message board.
     b"501 Syntax error in parameters or arguments.",  # 0
     b"230 User logged in, proceed.",  # 1
     b"331 User name okay, need password.",  # 2
@@ -256,7 +256,7 @@ class ftp:
                             print("Unknown command:", command)
                     del raw
                 except UnicodeError:
-                    print("UnicodeError")
+                    pass
             del size
         except OSError:
             pass
@@ -303,6 +303,7 @@ class ftp:
     # Internal functions passed this point. Do not touch. Or do. Idc.
 
     def _user(self, data) -> None:
+        # Username reading.
         if len(self._authlist):
             user = data.split(" ")[1].replace("\r\n", "")
             if user not in self._authlist.keys():
@@ -320,6 +321,7 @@ class ftp:
             self._send_msg(1)
 
     def _pass(self, data) -> None:
+        # Read the password and auth if correct.
         if self.user is not None:
             passwd = data.split(" ")[1].replace("\r\n", "")
             if passwd == self._authlist[self.user]:
@@ -347,7 +349,7 @@ class ftp:
             with open(filen, "r" if self.mode else "rb") as f:
                 self._send_msg(17)
                 while True:
-                    dat = f.read(self.tx_size)
+                    dat = f.read(self.tx_size) # Reading in chunks
                     if not dat:
                         del dat
                         break
@@ -356,15 +358,13 @@ class ftp:
                     res = 0
                     while res != len(dat):
                         try:
-                            res += self._data_socket.send(dat[res:])
+                            res += self._data_socket.send(memoryview(dat[res:]))
                         except OSError:
                             pass
-                    del dat, res
             self._send_msg(19)
         except OSError:
             self._send_msg(18)
         self._disable_data()
-        del filen
 
     def _stor(self, data, append=False) -> None:
         if not self._authcheck():
@@ -485,7 +485,7 @@ class ftp:
         try:
             if stat(target)[0] != 16384:
                 raise OSError  # File
-        except OSError:  # non-existent
+        except OSError:  # Does non exist
             self._send_msg(9)
             return
         listing = listdir(target)
