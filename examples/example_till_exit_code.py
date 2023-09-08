@@ -1,6 +1,6 @@
 import wifi
 from socketpool import SocketPool
-from ftp import ftp
+from ftp_server import ftp
 from sys import exit
 
 wifi.radio.connect("Your_wifi_ssid_here", "Your_wifi_passwd_here")
