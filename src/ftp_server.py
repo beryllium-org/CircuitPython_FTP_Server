@@ -30,6 +30,7 @@ _msgs = [ # The message board.
     b"350 File or directory exists, ready for destination name.",  # 22
     b"553 Requested action not taken. File name not allowed.",  # 23
     b"350 Ready for RNTO.",  # 24
+    b"451 Requested action aborted: local error in processing.",  # 25
 ]
 
 
@@ -628,7 +629,7 @@ class ftp:
                 )
                 self._pasv_sock.bind((self._iptup[0], self.pasv_port))
                 self._pasv_sock.setblocking(False)
-                self._pasv_sock.listen(1)
+                self._pasv_sock.listen(2)
                 self._conn.send(
                     b"227 Entering Passive Mode ("
                     + self._iptup[0].replace(".", ",")
@@ -639,7 +640,7 @@ class ftp:
                     + b").\r\n"
                 )
                 timeout = monotonic()
-                while (monotonic() - timeout) < 4:
+                while (monotonic() - timeout) < 1.2:
                     try:
                         self._data_socket, self._client_pasv = self._pasv_sock.accept()
                         self._data_socket.setblocking(False)
@@ -648,8 +649,12 @@ class ftp:
                         break
                     except OSError:
                         pass
-                if self.verbose and monotonic() - timeout > 4:
+                if self._data_socket is None and self.verbose:
                     print("PASV timed out!")
+                    self._disable_data()
+                    self._send_msg(25)
+                    raise TimeoutError("Client did not connect.")
+
         else:
             self._data_socket.connect((self.data_ip, self.data_port))
             if self.verbose:
