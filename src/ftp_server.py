@@ -357,9 +357,10 @@ class ftp:
                     if self.mode:
                         dat = dat.encode(_enc)
                     res = 0
+                    mv = memoryview(dat)
                     while res != len(dat):
                         try:
-                            res += self._data_socket.send(memoryview(dat)[res:])
+                            res += self._data_socket.send(mv[res:])
                         except OSError:
                             pass
             self._send_msg(19)
