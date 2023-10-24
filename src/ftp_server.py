@@ -489,6 +489,7 @@ class ftp:
         self._reset_data_sock()
         self._pasv = False
         self._reset_data_sock()
+        spl = data[1].split(",")
         self.data_ip = ".".join(spl[:4])
         self.data_port = (256 * int(spl[4])) + int(spl[5])
         self._send_msg(11)
