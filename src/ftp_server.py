@@ -1,5 +1,5 @@
 from os import listdir, remove, getcwd, chdir, stat, mkdir, rmdir, rename
-from time import monotonic, localtime
+from time import monotonic, localtime, sleep
 from storage import remount
 
 _enc = "UTF-8" # We currently only support UTF-8
@@ -31,6 +31,7 @@ _msgs = [ # The message board.
     b"553 Requested action not taken. File name not allowed.",  # 23
     b"350 Ready for RNTO.",  # 24
     b"451 Requested action aborted: local error in processing.",  # 25
+    b"226 Aborted.", # 26
 ]
 
 
@@ -202,69 +203,72 @@ class ftp:
             if size:
                 try:
                     raw = bytes(memoryview(self._rx_buf)[:size]).decode(_enc)
-                    data = raw.split("\r\n")
-                    if len(data) > 2:
-                        data = data[1]
-                    else:
-                        data = data[0]
-                    data = data.split(" ")
+                    cmds = raw.split("\r\n")[:-1]
                     if self.verbose:
-                        print("Effective Data:", data)
-                    command = data[0].lower()
-                    if self.verbose:
-                        print("Running:", command)
-                    if command == "user":
-                        self._user(data)
-                    elif command == "pass":
-                        self._pass(data)
-                    elif command == "syst":
-                        self._syst()
-                    elif command == "pwd":
-                        self._pwd()
-                    elif command == "cwd":
-                        self._cwd(data)
-                    elif command == "cdup":
-                        self._cdup()
-                    elif command in ["list", "nlist"]:
-                        self._list(data)
-                    elif command == "port":
-                        self._port(data)
-                    elif command == "size":
-                        self._size(data)
-                    elif command == "type":
-                        self._type(data)
-                    elif command == "pasv":
-                        self._enpasv()
-                    elif command == "noop":
-                        self._send_msg(14)
-                    elif command == "retr":
-                        self._retr(data)
-                    elif command == "stor":
-                        self._stor(data)
-                    elif command == "dele":
-                        self._dele(data)
-                    elif command == "rmd":
-                        self._rmd(data)
-                    elif command == "mkd":
-                        self._mkd(data)
-                    elif command == "rnfr":
-                        self._rnfr(data)
-                    elif command == "rnto":
-                        self._rnto(data)
-                    elif command == "appe":
-                        self._stor(data, True)
-                    elif command == "quit":
-                        self._send_msg(15)
-                        self.disconnect()
-                        res = True
-                    else:
-                        self._send_msg(0)
+                        print("Commands:", cmds)
+                    if "ABOR" in cmds:
+                        cmds = []
+                        self._reset_data_sock()
+                        self._send_msg(26)
                         if self.verbose:
-                            print("Unknown command:", command)
-                    if self.verbose:
-                        print("Done with command.")
-                    del command
-                    del raw, data
+                            print("Aborted.")
+                    for i in cmds:
+                        data = i.split(" ")
+                        if self.verbose:
+                            print("Current data line:", data)
+                        command = data[0].lower()
+                        if command == "user":
+                            self._user(data)
+                        elif command == "pass":
+                            self._pass(data)
+                        elif command == "syst":
+                            self._syst()
+                        elif command == "pwd":
+                            self._pwd()
+                        elif command == "cwd":
+                            self._cwd(data)
+                        elif command == "cdup":
+                            self._cdup()
+                        elif command in ["list", "nlist"]:
+                            self._list(data)
+                        elif command == "port":
+                            self._port(data)
+                        elif command == "size":
+                            self._size(data)
+                        elif command == "type":
+                            self._type(data)
+                        elif command == "pasv":
+                            self._enpasv()
+                        elif command == "noop":
+                            self._send_msg(14)
+                        elif command == "retr":
+                            self._retr(data)
+                        elif command == "stor":
+                            self._stor(data)
+                        elif command == "dele":
+                            self._dele(data)
+                        elif command == "rmd":
+                            self._rmd(data)
+                        elif command == "mkd":
+                            self._mkd(data)
+                        elif command == "rnfr":
+                            self._rnfr(data)
+                        elif command == "rnto":
+                            self._rnto(data)
+                        elif command == "appe":
+                            self._stor(data, True)
+                        elif command == "quit":
+                            self._send_msg(15)
+                            self.disconnect()
+                            res = True
+                        else:
+                            self._send_msg(0)
+                            if self.verbose:
+                                print("Unknown command:", command)
+                        if self.verbose:
+                            print("Done with command.")
+                        del command, data
+                    del raw, cmds
                 except UnicodeError:
                     pass
             del size
@@ -479,6 +483,8 @@ class ftp:
     def _enpasv(self) -> None:
         if not self._authcheck():
             return
+        if self._pasv and self._data_socket is not None:
+            return
         self._pasv = True
         self._reset_data_sock()
         self._enable_data()
@@ -493,6 +499,8 @@ class ftp:
         self.data_ip = ".".join(spl[:4])
         self.data_port = (256 * int(spl[4])) + int(spl[5])
         self._send_msg(11)
+        if self.verbose:
+            print("Sent port accept.")
         del spl
 
     def _list(self, data) -> None:
@@ -649,6 +657,7 @@ class ftp:
                 self._pasv_sock.bind((self._iptup[0], self.pasv_port))
                 self._pasv_sock.listen(2)
                 self._pasv_sock.setblocking(False)
+                sleep(0.15)
                 self._s_send(
                     b"227 Entering Passive Mode ("
                     + self._iptup[0].replace(".", ",")
@@ -659,11 +668,9 @@ class ftp:
                     + b").\r\n"
                 )
                 timeout = monotonic()
-                while (monotonic() - timeout) < 3:
+                while (monotonic() - timeout) < 2:
                     try:
                         self._data_socket, self._client_pasv = self._pasv_sock.accept()
-                        print(self._data_socket)
-                        print(self._client_pasv)
                         self._data_socket.setblocking(False)
                         if self.verbose:
                             print("Enabled PASV.")
