@@ -1,5 +1,5 @@
 from os import listdir, remove, getcwd, chdir, stat, mkdir, rmdir, rename
-from time import monotonic, localtime, sleep
+from time import monotonic, localtime
 from storage import remount
 
 _enc = "UTF-8" # We currently only support UTF-8
@@ -202,51 +202,57 @@ class ftp:
             if size:
                 try:
                     raw = bytes(memoryview(self._rx_buf)[:size]).decode(_enc)
+                    data = raw.split("\r\n")
+                    if len(data) > 2:
+                        data = data[1]
+                    else:
+                        data = data[0]
+                    data = data.split(" ")
                     if self.verbose:
-                        print(">" * 40 + "\n" + raw + "\n" + "<" * 40)
-                    command = raw.split(" ")[0].replace("\r\n", "").lower()
+                        print("Effective Data:", data)
+                    command = data[0].lower()
+                    if self.verbose:
+                        print("Running:", command)
                     if command == "user":
-                        self._user(raw)
+                        self._user(data)
                     elif command == "pass":
-                        self._pass(raw)
+                        self._pass(data)
                     elif command == "syst":
                         self._syst()
                     elif command == "pwd":
                         self._pwd()
                     elif command == "cwd":
-                        self._cwd(raw)
+                        self._cwd(data)
                     elif command == "cdup":
                         self._cdup()
-                    elif command == "list":
-                        self._list(raw)
-                    elif command == "nlist":
-                        self._list(raw)
+                    elif command in ["list", "nlist"]:
+                        self._list(data)
                     elif command == "port":
-                        self._port(raw)
+                        self._port(data)
                     elif command == "size":
-                        self._size(raw)
+                        self._size(data)
                     elif command == "type":
-                        self._type(raw)
+                        self._type(data)
                     elif command == "pasv":
                         self._enpasv()
                     elif command == "noop":
                         self._send_msg(14)
                     elif command == "retr":
-                        self._retr(raw)
+                        self._retr(data)
                     elif command == "stor":
-                        self._stor(raw)
+                        self._stor(data)
                     elif command == "dele":
-                        self._dele(raw)
+                        self._dele(data)
                     elif command == "rmd":
-                        self._rmd(raw)
+                        self._rmd(data)
                     elif command == "mkd":
-                        self._mkd(raw)
+                        self._mkd(data)
                     elif command == "rnfr":
-                        self._rnfr(raw)
+                        self._rnfr(data)
                     elif command == "rnto":
-                        self._rnto(raw)
+                        self._rnto(data)
                     elif command == "appe":
-                        self._stor(raw, True)
+                        self._stor(data, True)
                     elif command == "quit":
                         self._send_msg(15)
                         self.disconnect()
@@ -255,7 +261,10 @@ class ftp:
                         self._send_msg(0)
                         if self.verbose:
                             print("Unknown command:", command)
-                    del raw
+                    if self.verbose:
+                        print("Done with command.")
+                    del command
+                    del raw, data
                 except UnicodeError:
                     pass
             del size
@@ -303,10 +312,28 @@ class ftp:
 
     # Internal functions passed this point. Do not touch. Or do. Idc.
 
+    def _s_send(self, data) -> None:
+        res = 0
+        mv = memoryview(data)
+        while res != len(data):
+            try:
+                res += self._conn.send(mv[res:])
+            except OSError:
+                pass
+
+    def _d_send(self, data) -> None:
+        res = 0
+        mv = memoryview(data)
+        while res != len(data):
+            try:
+                res += self._data_socket.send(mv[res:])
+            except OSError:
+                pass
+
     def _user(self, data) -> None:
         # Username reading.
         if len(self._authlist):
-            user = data.split(" ")[1].replace("\r\n", "")
+            user = data[1]
             if user not in self._authlist.keys():
                 self._send_msg(0)
             elif self._authlist[user] is None:
@@ -324,7 +351,7 @@ class ftp:
     def _pass(self, data) -> None:
         # Read the password and auth if correct.
         if self.user is not None:
-            passwd = data.split(" ")[1].replace("\r\n", "")
+            passwd = data[1]
             if passwd == self._authlist[self.user]:
                 self._send_msg(1)
                 self._authenticated = True
@@ -344,7 +371,7 @@ class ftp:
     def _retr(self, data) -> None:
         if not self._authcheck():
             return
-        filen = data.split(" ")[1].replace("\r\n", "")
+        filen = data[1]
         self._enable_data()
         try:
             with open(filen, "r" if self.mode else "rb") as f:
@@ -356,13 +383,7 @@ class ftp:
                         break
                     if self.mode:
                         dat = dat.encode(_enc)
-                    res = 0
-                    mv = memoryview(dat)
-                    while res != len(dat):
-                        try:
-                            res += self._data_socket.send(mv[res:])
-                        except OSError:
-                            pass
+                    self._d_send(dat)
             self._send_msg(19)
         except OSError:
             self._send_msg(18)
@@ -376,13 +397,13 @@ class ftp:
             if self.ro:
                 raise RuntimeError
             remount("/", False)
-            filen = data.split(" ")[1].replace("\r\n", "")
+            filen = data[1]
             mod = "w" if self.mode else "wb"
             if append:
                 mod = "a" if self.mode else "ab"
                 with open(filen):
                     pass  # Ensure it exists
-            self._conn.send(b"150 Opening data connection for {}\r\n".format(filen))
+            self._s_send(b"150 Opening data connection for {}\r\n".format(filen))
             with open(filen, mod) as f:
                 cache_stored = 0
                 while True:
@@ -416,7 +437,7 @@ class ftp:
     def _type(self, data) -> None:
         if not self._authcheck():
             return
-        modeset = data.split(" ")[1].replace("\r\n", "")
+        modeset = data[1]
         if modeset == "I":
             self.mode = False
             self._send_msg(12)
@@ -427,11 +448,11 @@ class ftp:
     def _size(self, data) -> None:
         if not self._authcheck():
             return
-        item = data.split(" ")[1].replace("\r\n", "")
+        item = data[1]
         try:
-            self._conn.send(b"213 " + str(stat(item)[6]).encode(_enc) + b"\r\n")
+            self._s_send(b"213 " + str(stat(item)[6]).encode(_enc) + b"\r\n")
         except OSError:
-            self._conn.send(b"550 SIZE could not be detected.\r\n")
+            self._s_send(b"550 SIZE could not be detected.\r\n")
 
     def _cdup(self) -> None:
         if not self._authcheck():
@@ -442,12 +463,12 @@ class ftp:
     def _pwd(self) -> None:
         if not self._authcheck():
             return
-        self._conn.send(b'257 "{}".\r\n'.format(getcwd()))
+        self._s_send(b'257 "{}".\r\n'.format(getcwd()))
 
     def _cwd(self, data) -> None:
         if not self._authcheck():
             return
-        ndr = data.split(" ")[1].replace("\r\n", "")
+        ndr = data[1]
         try:
             chdir(ndr)
             self._send_msg(6)
@@ -468,7 +489,6 @@ class ftp:
         self._reset_data_sock()
         self._pasv = False
         self._reset_data_sock()
-        spl = data.split(" ")[1].replace("\r\n", "").split(",")
         self.data_ip = ".".join(spl[:4])
         self.data_port = (256 * int(spl[4])) + int(spl[5])
         self._send_msg(11)
@@ -478,11 +498,8 @@ class ftp:
         if not self._authcheck():
             return
         dirl = None
-        dats = data.split(" ")
-        if len(dats) > 1:
-            dirl = dats[1].replace("\r\n", "")
-        del dats
-        del data
+        if len(data) > 1:
+            dirl = data[1].replace("\r\n", "")
         target = getcwd() if dirl is None else dirl
         try:
             if stat(target)[0] != 16384:
@@ -540,7 +557,7 @@ class ftp:
             del mint
             line += b" " + i.encode(_enc)
             del date_sr
-            self._data_socket.send(line + b"\r\n")
+            self._d_send(line + b"\r\n")
         self._disable_data()
         self._send_msg(10)
         del dirl, target
@@ -548,7 +565,7 @@ class ftp:
     def _dele(self, data) -> None:
         if not self._authcheck():
             return
-        filename = data.split(" ")[1].replace("\r\n", "")
+        filename = data[1]
         try:
             if self.ro:
                 raise RuntimeError
@@ -564,7 +581,7 @@ class ftp:
     def _rmd(self, data) -> None:
         if not self._authcheck():
             return
-        dirname = data.split(" ")[1].replace("\r\n", "")
+        dirname = data[1]
         try:
             if self.ro:
                 raise RuntimeError
@@ -580,7 +597,7 @@ class ftp:
     def _mkd(self, data) -> None:
         if not self._authcheck():
             return
-        dirname = data.split(" ")[1].replace("\r\n", "")
+        dirname = data[1]
         try:
             if self.ro:
                 raise RuntimeError
@@ -596,7 +613,7 @@ class ftp:
     def _rnfr(self, data) -> None:
         if not self._authcheck():
             return
-        self._rename_from = data.split(" ")[1].replace("\r\n", "")
+        self._rename_from = data[1]
         self._send_msg(24)  # Command successful
 
     def _rnto(self, data) -> None:
@@ -605,7 +622,7 @@ class ftp:
         if self._rename_from == None:
             self._send_msg(0)  # Invalid request, RNFR missing
             return
-        rename_to = data.split(" ")[1].replace("\r\n", "")
+        rename_to = data[1]
         try:
             if self.ro:
                 raise RuntimeError
@@ -621,17 +638,17 @@ class ftp:
             self._rename_from = None
 
     def _enable_data(self):  # If you are using ACTIVE, disable your firewall.
-        if self.verbose:
-            print("Enabling socket..")
         if self._pasv:
             if self._data_socket is None:
+                if self.verbose:
+                    print("Enabling PASV socket..")
                 self._pasv_sock = self._pool.socket(
                     self._pool.AF_INET, self._pool.SOCK_STREAM
                 )
                 self._pasv_sock.bind((self._iptup[0], self.pasv_port))
-                self._pasv_sock.setblocking(False)
                 self._pasv_sock.listen(2)
-                self._conn.send(
+                self._pasv_sock.setblocking(False)
+                self._s_send(
                     b"227 Entering Passive Mode ("
                     + self._iptup[0].replace(".", ",")
                     + b","
@@ -641,25 +658,30 @@ class ftp:
                     + b").\r\n"
                 )
                 timeout = monotonic()
-                while (monotonic() - timeout) < 1.2:
+                while (monotonic() - timeout) < 3:
                     try:
                         self._data_socket, self._client_pasv = self._pasv_sock.accept()
+                        print(self._data_socket)
+                        print(self._client_pasv)
                         self._data_socket.setblocking(False)
                         if self.verbose:
                             print("Enabled PASV.")
                         break
                     except OSError:
                         pass
-                if self._data_socket is None and self.verbose:
-                    print("PASV timed out!")
+                if self._data_socket is None:
+                    if self.verbose:
+                        print("PASV timed out!")
                     self._disable_data()
                     self._send_msg(25)
                     raise TimeoutError("Client did not connect.")
 
         else:
+            if self.verbose:
+                    print("Connecting to ACTIVE socket..")
             self._data_socket.connect((self.data_ip, self.data_port))
             if self.verbose:
-                print("ACTV.", end="")
+                    print("Enabled ACTIVE.")
         self._sock_state = True
 
     def _disable_data(self):
@@ -729,11 +751,17 @@ class ftp:
         if self.deinited:
             return
         if self._data_socket is not None:
-            self._data_socket.close()
+            try:
+                self._data_socket.close()
+            except:
+                pass
             self._data_socket = None
         if self.pasv:
             if self._pasv_sock is not None:
-                self._pasv_sock.close()
+                try:
+                    self._pasv_sock.close()
+                except:
+                    pass
                 self._pasv_sock = None
         else:
             self._data_socket = self._pool.socket(
@@ -743,7 +771,7 @@ class ftp:
             self._data_socket.listen(1)
 
     def _send_msg(self, no) -> None:
-        self._conn.send(_msgs[no] + b"\r\n")
+        self._s_send(_msgs[no] + b"\r\n")
 
     def _ensure_conn(self) -> bool:
         if not self.connected:
