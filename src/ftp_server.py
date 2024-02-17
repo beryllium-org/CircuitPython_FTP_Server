@@ -73,6 +73,7 @@ class ftp:
         # Private
         self._pool = pool
         self._socket = pool.socket(pool.AF_INET, pool.SOCK_STREAM)
+        self._socket.setsockopt(pool.SOL_SOCKET, pool.SO_REUSEADDR, 1)
         self._socket.setblocking(False)
         self._data_socket = None
         self._socket.bind((ip, port))
@@ -483,8 +484,6 @@ class ftp:
     def _enpasv(self) -> None:
         if not self._authcheck():
             return
-        if self._pasv and self._data_socket is not None:
-            return
         self._pasv = True
         self._reset_data_sock()
         self._enable_data()
@@ -650,10 +649,10 @@ class ftp:
         if self._pasv:
             if self._data_socket is None:
                 if self.verbose:
-                    print("Enabling PASV socket..")
-                self._pasv_sock = self._pool.socket(
-                    self._pool.AF_INET, self._pool.SOCK_STREAM
-                )
+                    print("Enabling PASV socket.. ", end="")
+                if self._pasv_sock is not None:
+                    self._pasv_sock.close()
+                self._pasv_sock = self._get_sock()
                 self._pasv_sock.bind((self._iptup[0], self.pasv_port))
                 self._pasv_sock.listen(2)
                 self._pasv_sock.setblocking(False)
@@ -683,7 +682,6 @@ class ftp:
                     self._disable_data()
                     self._send_msg(25)
                     raise TimeoutError("Client did not connect.")
-
         else:
             if self.verbose:
                     print("Connecting to ACTIVE socket..")
@@ -772,9 +770,7 @@ class ftp:
                     pass
                 self._pasv_sock = None
         else:
-            self._data_socket = self._pool.socket(
-                self._pool.AF_INET, self._pool.SOCK_STREAM
-            )
+            self._data_socket = self._get_sock()
             self._data_socket.bind(self._iptup)
             self._data_socket.listen(1)
 
@@ -792,3 +788,8 @@ class ftp:
             self.disconnect()
             return True
         return False
+
+    def _get_sock(self):
+        sock = self._pool.socket(self._pool.AF_INET, self._pool.SOCK_STREAM)
+        sock.setsockopt(self._pool.SOL_SOCKET, self._pool.SO_REUSEADDR, 1)
+        return sock
