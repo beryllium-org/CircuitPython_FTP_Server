@@ -73,7 +73,10 @@ class ftp:
         # Private
         self._pool = pool
         self._socket = pool.socket(pool.AF_INET, pool.SOCK_STREAM)
-        self._socket.setsockopt(pool.SOL_SOCKET, pool.SO_REUSEADDR, 1)
+        try:
+            self._socket.setsockopt(pool.SOL_SOCKET, pool.SO_REUSEADDR, 1)
+        except AttributeError:
+            pass
         self._socket.setblocking(False)
         self._data_socket = None
         self._socket.bind((ip, port))
@@ -791,5 +794,8 @@ class ftp:
 
     def _get_sock(self):
         sock = self._pool.socket(self._pool.AF_INET, self._pool.SOCK_STREAM)
-        sock.setsockopt(self._pool.SOL_SOCKET, self._pool.SO_REUSEADDR, 1)
+        try:
+            sock.setsockopt(self._pool.SOL_SOCKET, self._pool.SO_REUSEADDR, 1)
+        except AttributeError:
+            pass
         return sock
