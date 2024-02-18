@@ -509,8 +509,10 @@ class ftp:
         if not self._authcheck():
             return
         dirl = None
-        if len(data) > 1:
-            dirl = data[1].replace("\r\n", "")
+        for i in data[1:]:
+            if i[0] != "-":
+                dirl = i.replace("\r\n", "")
+                break
         target = getcwd() if dirl is None else dirl
         try:
             if stat(target)[0] != 16384:
