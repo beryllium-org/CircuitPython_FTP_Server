@@ -524,9 +524,9 @@ class ftp:
         self._send_msg(8)
         self._enable_data()
         for i in listing:
-            stati = stat(i)
+            stati = stat(i if target is None else f"{target}/{i}")
             line = b""
-            if stat(f"{target}/{i}")[0] == 32768:
+            if stati[0] == 32768:
                 line += b"-rwxrwxrwx 1"
             else:
                 line += b"drwxrwxrwx 2"
