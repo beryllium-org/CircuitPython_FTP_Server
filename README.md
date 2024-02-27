@@ -1,5 +1,5 @@
 # CircuitPython FTP Server
-A simple FTP server for Circuitpython 8.x, with PASV and ACTIVE support!<br />
+A simple FTP server for Circuitpython 8.x and 9.x, with PASV and ACTIVE support!<br />
 <br />
 <b>Installation:</b><br /><br />
 You can copy the 'src/ftp.py' to your board directly or instead make it an mpy package.<br />
