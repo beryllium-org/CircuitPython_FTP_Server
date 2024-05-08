@@ -1,6 +1,7 @@
 from os import listdir, remove, getcwd, chdir, stat, mkdir, rmdir, rename
 from time import monotonic, localtime, sleep
 from storage import remount
+from gc import collect
 
 _enc = "UTF-8" # We currently only support UTF-8
 
@@ -392,10 +393,14 @@ class ftp:
                     if self.mode:
                         dat = dat.encode(_enc)
                     self._d_send(dat)
+                    del dat
+                    collect()
             self._send_msg(19)
         except OSError:
             self._send_msg(18)
         self._disable_data()
+        collect()
+        collect()
 
     def _stor(self, data, append=False) -> None:
         if not self._authcheck():
@@ -423,6 +428,7 @@ class ftp:
                         ):
                             f.write(bytes(memoryview(self._file_cache)[:cache_stored]))
                             cache_stored = 0
+                            collect()
                         self._file_cache[cache_stored:size] = memoryview(self._rx_buf)[
                             :size
                         ]
@@ -434,6 +440,7 @@ class ftp:
                             break
                 if cache_stored:
                     f.write(bytes(memoryview(self._file_cache)[:cache_stored]))
+                    collect()
             self._send_msg(19)
             remount("/", True)
         except RuntimeError:
@@ -441,6 +448,8 @@ class ftp:
         except OSError:  # Append failed
             self._send_msg(18)
         self._disable_data()
+        collect()
+        collect()
 
     def _type(self, data) -> None:
         if not self._authcheck():
