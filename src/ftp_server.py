@@ -43,7 +43,7 @@ class ftp:
         ip,
         port=21,
         authlist={},
-        maxcache=5,
+        maxcache=2,
         maxbuf=2880,
         auth_timeout=120,
         verbose=False,
@@ -273,6 +273,10 @@ class ftp:
                         if self.verbose:
                             print("Done with command.")
                         del command, data
+                        collect()
+                        collect()
+                        collect()
+                        collect()
                     del raw, cmds
                 except UnicodeError:
                     pass
@@ -386,6 +390,8 @@ class ftp:
             with open(filen, "r" if self.mode else "rb") as f:
                 self._send_msg(17)
                 while True:
+                    collect()
+                    collect()
                     dat = f.read(self.tx_size) # Reading in chunks
                     if not dat:
                         del dat
@@ -399,8 +405,6 @@ class ftp:
         except OSError:
             self._send_msg(18)
         self._disable_data()
-        collect()
-        collect()
 
     def _stor(self, data, append=False) -> None:
         if not self._authcheck():
@@ -429,6 +433,7 @@ class ftp:
                             f.write(bytes(memoryview(self._file_cache)[:cache_stored]))
                             cache_stored = 0
                             collect()
+                            collect()
                         self._file_cache[cache_stored:size] = memoryview(self._rx_buf)[
                             :size
                         ]
@@ -441,6 +446,7 @@ class ftp:
                 if cache_stored:
                     f.write(bytes(memoryview(self._file_cache)[:cache_stored]))
                     collect()
+                    collect()
             self._send_msg(19)
             remount("/", True)
         except RuntimeError:
@@ -448,8 +454,7 @@ class ftp:
         except OSError:  # Append failed
             self._send_msg(18)
         self._disable_data()
-        collect()
-        collect()
+
 
     def _type(self, data) -> None:
         if not self._authcheck():
