@@ -3,9 +3,9 @@ from time import monotonic, localtime, sleep
 from storage import remount
 from gc import collect
 
-_enc = "UTF-8" # We currently only support UTF-8
+_enc = "UTF-8"  # We currently only support UTF-8
 
-_msgs = [ # The message board.
+_msgs = [  # The message board.
     b"501 Syntax error in parameters or arguments.",  # 0
     b"230 User logged in, proceed.",  # 1
     b"331 User name okay, need password.",  # 2
@@ -32,7 +32,7 @@ _msgs = [ # The message board.
     b"553 Requested action not taken. File name not allowed.",  # 23
     b"350 Ready for RNTO.",  # 24
     b"451 Requested action aborted: local error in processing.",  # 25
-    b"226 Aborted.", # 26
+    b"226 Aborted.",  # 26
 ]
 
 
@@ -392,7 +392,7 @@ class ftp:
                 while True:
                     collect()
                     collect()
-                    dat = f.read(self.tx_size) # Reading in chunks
+                    dat = f.read(self.tx_size)  # Reading in chunks
                     if not dat:
                         del dat
                         break
@@ -454,7 +454,6 @@ class ftp:
         except OSError:  # Append failed
             self._send_msg(18)
         self._disable_data()
-
 
     def _type(self, data) -> None:
         if not self._authcheck():
@@ -703,10 +702,10 @@ class ftp:
                     raise TimeoutError("Client did not connect.")
         else:
             if self.verbose:
-                    print("Connecting to ACTIVE socket..")
+                print("Connecting to ACTIVE socket..")
             self._data_socket.connect((self.data_ip, self.data_port))
             if self.verbose:
-                    print("Enabled ACTIVE.")
+                print("Enabled ACTIVE.")
         self._sock_state = True
 
     def _disable_data(self):
